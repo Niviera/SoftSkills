@@ -11,14 +11,15 @@
 #include <esp_now.h>
 
 /* Spezifische Pin Sender*/
-#define DHTPIN 26
-#define MQPIN 34
+// #define DHTPIN 26
+// #define MQPIN 34
 
 #define LICHTPIN 35
+#define REGENSENSOR 32
 
 /* Spezifische Pin Empfänger */
-// #define DHTPIN 32
-// #define MQPIN 33
+#define DHTPIN 32
+#define MQPIN 33
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -119,6 +120,11 @@ void sender_loop()
   Serial.println(analogRead(LICHTPIN));
   myData.brightness = analogRead(LICHTPIN);
 
+  /* Regensensor */
+  Serial.print("Regen: ");
+  Serial.println(analogRead(REGENSENSOR));
+  myData.rain = analogRead(REGENSENSOR);
+
   /* Sende Daten */
   send_Data();
   delay(2000);
@@ -127,6 +133,7 @@ void empfaenger_loop()
 {
   float temp;
   float humi;
+  float innen_co2;
   /* Alles was der Empfänger machen soll */
 
   /* DHT */
@@ -159,6 +166,11 @@ void empfaenger_loop()
     humi = event.relative_humidity;
   }
 
+  Serial.print("MQ: ");
+  Serial.println(mq.getPPM());
+  Serial.print("Analog: ");
+  Serial.println(analogRead(MQPIN));
+
   switch (display_content)
   {
   case 0:
@@ -178,7 +190,8 @@ void empfaenger_loop()
     display_content++;
     break;
   case 4:
-    float innen_co2 = mq.getPPM();
+    innen_co2 = mq.getPPM();
+
     if (innen_co2 <= 1000)
     {
       display.printCo2(&innen_co2, "--Luften");
@@ -191,6 +204,45 @@ void empfaenger_loop()
     {
       display.printCo2(&innen_co2, "++Luften");
     }
+    display_content++;
+    break;
+  case 5:
+    if (myData.rain >= 4000)
+    {
+      display.writeStatusMSG("Kein Regen");
+    }
+    else if (myData.rain >= 2000)
+    {
+      display.writeStatusMSG("Leichter Regen");
+    }
+    else if (myData.rain >= 1000)
+    {
+      display.writeStatusMSG("Regen");
+    }
+    else
+    {
+      display.writeStatusMSG("Starker Regen");
+    }
+    display_content++;
+    break;
+  case 6:
+
+    if (myData.brightness >= 3000)
+    {
+      display.writeStatusMSG("Es ist Dunkel");
+    }
+    else if (myData.brightness >= 2000)
+    {
+      display.writeStatusMSG("Es ist Daemmerung");
+    }
+    else if (myData.brightness >= 1000)
+    {
+      display.writeStatusMSG("Es ist hell");
+    }
+    else
+    {
+      display.writeStatusMSG("Es ist  sehr hell");
+    }
     display_content = 0;
     break;
   }
@@ -200,7 +252,7 @@ void empfaenger_loop()
 void sender_setup()
 {
   pinMode(LICHTPIN, INPUT);
-  pinMode(MQPIN, INPUT);
+
   if (esp_now_init() != ESP_OK)
   {
     Serial.println("Error initializing ESP-NOW");
@@ -247,13 +299,14 @@ void setup()
   // Initialize device.
 
   dht.begin();
-  // empfaenger_setup();
-  sender_setup();
+  pinMode(MQPIN, INPUT);
+  empfaenger_setup();
+  // sender_setup();
 }
 
 void loop()
 {
   Serial.println(WiFi.macAddress());
-  // empfaenger_loop();
-  sender_loop();
+  empfaenger_loop();
+  // sender_loop();
 }
